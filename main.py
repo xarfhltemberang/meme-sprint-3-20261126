@@ -13,7 +13,21 @@ import sys
 
 # Gate limits from the competition kit: at most 1 MiB, at most 1024x1024 px.
 MAX_BYTES = 1_048_576
+MAX_DIMENSION = 1024
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def png_dimensions(path: str) -> tuple[int, int]:
+    """Read width/height from the PNG IHDR chunk (no Pillow needed)."""
+    with open(path, "rb") as f:
+        data = f.read(33)
+    if len(data) < 33 or data[:8] != PNG_SIGNATURE:
+        raise ValueError("not a PNG file")
+    if data[12:16] != b"IHDR":
+        raise ValueError("PNG has no IHDR chunk")
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    return width, height
 
 
 def main() -> int:
@@ -23,10 +37,17 @@ def main() -> int:
     out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
     dst = os.path.join(out_dir, "entry.png")
 
-    with open(src, "rb") as f:
-        header = f.read(len(PNG_SIGNATURE))
-    if header != PNG_SIGNATURE:
-        print("entry.png is not a valid PNG", file=sys.stderr)
+    try:
+        width, height = png_dimensions(src)
+    except ValueError as exc:
+        print(f"entry.png is not a valid PNG: {exc}", file=sys.stderr)
+        return 1
+    if width > MAX_DIMENSION or height > MAX_DIMENSION:
+        print(
+            f"entry.png is {width}x{height}, over the {MAX_DIMENSION}x"
+            f"{MAX_DIMENSION} gate",
+            file=sys.stderr,
+        )
         return 1
 
     size = os.path.getsize(src)
